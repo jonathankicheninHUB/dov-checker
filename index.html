@@ -3,11 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dawn of Victory - Vérificateur d'Assets NFT</title>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@waxio/waxjs@latest/dist/waxjs.js"></script>
+    <title>Dawn of Victory - Checker WAX/WharfKit</title>
     
     <style>
+        /* CSS du précédent code conservé ici (omnis pour la concision) */
         body {
             font-family: Arial, sans-serif;
             display: flex;
@@ -79,9 +78,9 @@
 
 <div class="container">
     <h1>⚔️ Dawn of Victory Asset Checker</h1>
-    <p>Connectez votre WAX Wallet pour vérifier vos actifs et débloquer des bonus dans le simulateur.</p>
+    <p>Connectez votre WAX Wallet (via WharfKit) pour vérifier vos actifs.</p>
 
-    <button id="connect-button" onclick="loginWax()">Connecter WAX Wallet</button>
+    <button id="connect-button" onclick="loginWithWharf()">Connecter Wallet (WharfKit)</button>
 
     <div id="wallet-status">Statut: Déconnecté</div>
     
@@ -90,80 +89,68 @@
     </div>
 
     <p style="margin-top: 30px; font-size: 0.8em; color: #aaa;">
-        *Ce projet utilise l'API publique AtomicAssets pour lire vos NFTs.
+        *Utilise WharfKit pour une connexion Web3 moderne et l'API AtomicAssets.
     </p>
 </div>
 
-<script>
-    // --- CONFIGURATION DE VOTRE PROJET (À MODIFIER !) ---
-    const COLLECTION_NAME = "dawnofvictory"; // Remplacez par le nom EXACT de votre collection WAX
-    const TEMPLATE_ID_TEST = "871035"; // Remplacez par un Template ID réel
-    const WAX_ENDPOINT = 'https://wax.greymass.com'; 
+<script type="module">
+    // Importation des composants nécessaires de WharfKit via le CDN
+    import { Session, WebIOWallet } from "https://cdn.jsdelivr.net/npm/@wharfkit/session@1.0.1/dist/session.js";
+    import { Chains } from "https://cdn.jsdelivr.net/npm/@wharfkit/session@1.0.1/dist/chains.js";
     
-    // --- Variables Globales et Initialisation ---
-    let wax = null;
-    let userAccount = null;
-
-    // Fonction d'initialisation appelée après le chargement du DOM
-    function initializeWax() {
-        // VÉRIFICATION CLÉ : S'assurer que la classe WaxJS existe
-        if (typeof WaxJS === 'undefined') {
-            console.error("Erreur critique : La librairie waxjs.js n'a pas été chargée.");
-            document.getElementById('wallet-status').innerText = "Erreur: WAXJS non chargé. Rechargez la page.";
-            // On empêche le clic pour ne pas avoir l'erreur
-            document.getElementById('connect-button').onclick = function() {
-                alert("Erreur: WAXJS n'est pas initialisé."); 
-            };
-            return;
-        }
-        
-        // Si WaxJS est défini, on peut initialiser
-        wax = new WaxJS({
-            rpcEndpoint: WAX_ENDPOINT,
-            tryAutoLogin: true 
-        });
-        
-        // On lance l'auto-login une fois que wax est bien initialisé
-        initWax();
-    }
-
-    // Appel l'initialisation après que tout le HTML soit chargé
-    document.addEventListener('DOMContentLoaded', initializeWax);
-
-    async function initWax() {
-        if (wax && await wax.isLoggedIn()) {
-            userAccount = wax.userAccount;
-            document.getElementById('wallet-status').innerText = `Connecté: ${userAccount}`;
-            await checkAndApplyAssets(userAccount);
-        }
-    }
-
-    // Fonction appelée par le bouton "Connecter"
-    async function loginWax() {
-        if (!wax) {
-            // Cette alerte est le fallback si l'initialisation a échoué (très peu probable maintenant)
-            alert("Erreur: WAXJS n'est pas initialisé.");
-            return;
-        }
-        
+    // --- CONFIGURATION DE VOTRE PROJET (À MODIFIER !) ---
+    const COLLECTION_NAME = "dawnofvictory"; 
+    const TEMPLATE_ID_TEST = "871035"; // Remplacer par un Template ID réel
+    
+    // Configuration de la chaîne WAX
+    const WAX_CHAIN = Chains.WAX;
+    
+    // Configuration de la session (doit être unique pour votre application)
+    const sessionConfig = {
+        appName: 'dawnofvictorychecker',
+        chains: [WAX_CHAIN],
+        wallets: [new WebIOWallet()], // Permet de connecter WAX Cloud Wallet et autres
+    };
+    
+    let session = new Session(sessionConfig);
+    
+    // Exposer la fonction loginWithWharf globalement pour qu'elle soit accessible au bouton onclick
+    window.loginWithWharf = async function() {
         try {
-            document.getElementById('asset-status').innerText = "Connexion en cours...";
-            userAccount = await wax.login();
+            document.getElementById('asset-status').innerText = "Ouverture du sélecteur de Wallet...";
+
+            // 1. Démarrer la session (l'utilisateur choisit et se connecte à son wallet)
+            const result = await session.login();
+            const userAccount = result.session.actor.toString();
+
             document.getElementById('wallet-status').innerText = `Connecté: ${userAccount}`;
+            
+            // 2. Vérification des Assets
             await checkAndApplyAssets(userAccount);
 
-        } catch (e) {
-            console.error("Échec de la connexion WAX:", e);
-            document.getElementById('wallet-status').innerText = "Statut: Échec de la connexion";
-            document.getElementById('asset-status').innerText = "Veuillez autoriser la connexion dans la fenêtre WAX Wallet.";
+        } catch (error) {
+            console.error("Échec de la connexion WharfKit:", error);
+            document.getElementById('wallet-status').innerText = "Statut: Échec de la connexion (Voir Console)";
+            document.getElementById('asset-status').innerText = "Connexion annulée ou erreur.";
         }
     }
+    
+    // Tentative de connexion automatique au chargement
+    session.restore().then(restoredSession => {
+        if (restoredSession) {
+            const userAccount = restoredSession.actor.toString();
+            document.getElementById('wallet-status').innerText = `Connecté (Auto): ${userAccount}`;
+            checkAndApplyAssets(userAccount);
+        }
+    });
 
-    // Vérifie la possession du NFT Test
+    // --- Fonctions de Vérification (Reste en JS simple, car l'API AtomicAssets est externe) ---
+
     async function checkNftPossession(walletAddress, templateId) {
         const API_URL = "https://wax.api.atomicassets.io/atomicassets/v1/assets";
         
         try {
+            // Utilisation des paramètres spécifiques pour la vérification
             const response = await fetch(`${API_URL}?owner=${walletAddress}&collection_name=${COLLECTION_NAME}&template_id=${templateId}&limit=1&hide_offers=true`);
             const data = await response.json();
             
@@ -176,7 +163,6 @@
         }
     }
 
-    // Gère le flux de vérification et applique la logique du jeu
     async function checkAndApplyAssets(account) {
         document.getElementById('asset-status').className = 'loading';
         document.getElementById('asset-status').innerText = "Chargement des actifs DOV en cours...";
@@ -187,13 +173,13 @@
             document.getElementById('asset-status').className = 'success';
             document.getElementById('asset-status').innerHTML = `
                 ✅ **Félicitations, COMMANDANT !**
-                <br>NFT ${TEMPLATE_ID_TEST} (Tank HQ) trouvé ! Accès aux unités premium débloqué !
+                <br>NFT ${TEMPLATE_ID_TEST} trouvé ! Accès aux unités premium débloqué !
             `;
         } else {
             document.getElementById('asset-status').className = 'failure';
             document.getElementById('asset-status').innerHTML = `
                 ❌ **Actifs de Base :**
-                <br>Le NFT ${TEMPLATE_ID_TEST} (Tank HQ) n'a pas été trouvé. Accès au simulateur standard.
+                <br>Le NFT ${TEMPLATE_ID_TEST} n'a pas été trouvé. Accès au simulateur standard.
             `;
         }
     }
