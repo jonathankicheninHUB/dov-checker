@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dawn of Victory - Vérificateur d'Assets NFT</title>
+    <script src="https://cdn.jsdelivr.net/npm/@waxio/waxjs@latest/dist/waxjs.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #1e1e1e;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            background-color: #2b2b2b;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+        h1 {
+            color: #4CAF50;
+            margin-bottom: 30px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s;
+        }
+        button:hover {
+            background-color: #45a049;
+            transform: translateY(-1px);
+        }
+        #wallet-status {
+            margin-top: 20px;
+            font-size: 1.2em;
+            color: #FFD700;
+        }
+        #asset-status {
+            margin-top: 30px;
+            padding: 15px;
+            border-radius: 6px;
+            background-color: #3a3a3a;
+            font-size: 1em;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .loading {
+            color: #888;
+        }
+        .success {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .failure {
+            color: #f44336;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>⚔️ Dawn of Victory Asset Checker</h1>
+    <p>Connectez votre WAX Wallet pour vérifier vos actifs et débloquer des bonus dans le simulateur.</p>
+
+    <button onclick="loginWax()">Connecter WAX Wallet</button>
+
+    <div id="wallet-status">Statut: Déconnecté</div>
+    
+    <div id="asset-status" class="loading">
+        Veuillez vous connecter pour charger vos unités DOV.
+    </div>
+
+    <p style="margin-top: 30px; font-size: 0.8em; color: #aaa;">
+        *Ce projet utilise l'API publique AtomicAssets pour lire vos NFTs sur la blockchain WAX. Aucune clé privée n'est demandée.
+    </p>
+</div>
+
+<script>
+    // --- CONFIGURATION DE VOTRE PROJET (À MODIFIER !) ---
+    const COLLECTION_NAME = "dawnofvictory"; // Remplacez par le nom EXACT de votre collection WAX
+    // ID du template de test : simule votre NFT "Tank HQ"
+    // REMPLACER "000000" par un Template ID réel que vous possédez dans votre collection
+    const TEMPLATE_ID_TEST = "000000"; 
+    const WAX_ENDPOINT = 'https://wax.greymass.com'; 
+    
+    // --- Variables Globales ---
+    let wax = null;
+    let userAccount = null;
+
+    // Initialisation de WAXJS
+    document.addEventListener('DOMContentLoaded', () => {
+        wax = new waxjs.WaxJS({
+            rpcEndpoint: WAX_ENDPOINT,
+            tryAutoLogin: true 
+        });
+        initWax();
+    });
+
+    async function initWax() {
+        if (await wax.isLoggedIn()) {
+            userAccount = wax.userAccount;
+            document.getElementById('wallet-status').innerText = `Connecté: ${userAccount}`;
+            await checkAndApplyAssets(userAccount);
+        }
+    }
+
+    // Fonction appelée par le bouton "Connecter"
+    async function loginWax() {
+        if (!wax) {
+            alert("Erreur: WAXJS n'est pas initialisé.");
+            return;
+        }
+        
+        try {
+            document.getElementById('asset-status').innerText = "Connexion en cours...";
+            userAccount = await wax.login();
+            document.getElementById('wallet-status').innerText = `Connecté: ${userAccount}`;
+            await checkAndApplyAssets(userAccount);
+
+        } catch (e) {
+            console.error("Échec de la connexion WAX:", e);
+            document.getElementById('wallet-status').innerText = "Statut: Échec de la connexion";
+            document.getElementById('asset-status').innerText = "Veuillez autoriser la connexion dans la fenêtre WAX Wallet.";
+        }
+    }
+
+    // Vérifie la possession du NFT Test
+    async function checkNftPossession(walletAddress, templateId) {
+        const API_URL = "https://wax.api.atomicassets.io/atomicassets/v1/assets";
+        
+        try {
+            const response = await fetch(`${API_URL}?owner=${walletAddress}&collection_name=${COLLECTION_NAME}&template_id=${templateId}&limit=1&hide_offers=true`);
+            const data = await response.json();
+            
+            // Retourne TRUE si des assets sont trouvés pour ce template ID
+            return data.data && data.data.length > 0;
+            
+        } catch (error) {
+            console.error("Erreur de vérification AtomicAssets:", error);
+            document.getElementById('asset-status').innerText = "Erreur lors de la vérification des assets.";
+            return false;
+        }
+    }
+
+    // Gère le flux de vérification et applique la logique du jeu
+    async function checkAndApplyAssets(account) {
+        document.getElementById('asset-status').className = 'loading';
+        document.getElementById('asset-status').innerText = "Chargement des actifs DOV en cours...";
+
+        const hasTestNFT = await checkNftPossession(account, TEMPLATE_ID_TEST);
+
+        if (hasTestNFT) {
+            document.getElementById('asset-status').className = 'success';
+            document.getElementById('asset-status').innerHTML = `
+                ✅ **Félicitations, COMMANDANT !**
+                <br>NFT ${TEMPLATE_ID_TEST} (Tank HQ) trouvé ! Accès aux unités premium débloqué !
+            `;
+            // --- Logique du jeu/simulateur : C'EST ICI QUE VOUS LANCEZ VOTRE JEU AVEC LES BONUS ---
+            // Exemple : game.launch({ units: 'premium' });
+        } else {
+            document.getElementById('asset-status').className = 'failure';
+            document.getElementById('asset-status').innerHTML = `
+                ❌ **Actifs de Base :**
+                <br>Le NFT ${TEMPLATE_ID_TEST} (Tank HQ) n'a pas été trouvé. Accès au simulateur standard.
+            `;
+            // Exemple : game.launch({ units: 'standard' });
+        }
+    }
+</script>
+
+</body>
+</html>
