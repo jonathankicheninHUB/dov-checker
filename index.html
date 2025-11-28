@@ -1,27 +1,137 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dawn of Victory - Vérificateur d'Assets NFT</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@waxio/waxjs@latest/dist/waxjs.js"></script>
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #1e1e1e;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            background-color: #2b2b2b;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+        h1 {
+            color: #4CAF50;
+            margin-bottom: 30px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s;
+        }
+        button:hover {
+            background-color: #45a049;
+            transform: translateY(-1px);
+        }
+        #wallet-status {
+            margin-top: 20px;
+            font-size: 1.2em;
+            color: #FFD700;
+        }
+        #asset-status {
+            margin-top: 30px;
+            padding: 15px;
+            border-radius: 6px;
+            background-color: #3a3a3a;
+            font-size: 1em;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .loading {
+            color: #888;
+        }
+        .success {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .failure {
+            color: #f44336;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>⚔️ Dawn of Victory Asset Checker</h1>
+    <p>Connectez votre WAX Wallet pour vérifier vos actifs et débloquer des bonus dans le simulateur.</p>
+
+    <button id="connect-button" onclick="loginWax()">Connecter WAX Wallet</button>
+
+    <div id="wallet-status">Statut: Déconnecté</div>
+    
+    <div id="asset-status" class="loading">
+        Veuillez vous connecter pour charger vos unités DOV.
+    </div>
+
+    <p style="margin-top: 30px; font-size: 0.8em; color: #aaa;">
+        *Ce projet utilise l'API publique AtomicAssets pour lire vos NFTs.
+    </p>
+</div>
+
 <script>
     // --- CONFIGURATION DE VOTRE PROJET (À MODIFIER !) ---
     const COLLECTION_NAME = "dawnofvictory"; // Remplacez par le nom EXACT de votre collection WAX
-    // ID du template de test : simule votre NFT "Tank HQ"
-    // REMPLACER "000000" par un Template ID réel que vous possédez dans votre collection
-    const TEMPLATE_ID_TEST = "871035"; 
+    const TEMPLATE_ID_TEST = "871035"; // Remplacez par un Template ID réel
     const WAX_ENDPOINT = 'https://wax.greymass.com'; 
     
-    // --- Variables Globales ---
-    // Initialisation de WAXJS directement ici, en dehors de tout événement, pour une disponibilité immédiate
-    const wax = new waxjs.WaxJS({
-        rpcEndpoint: WAX_ENDPOINT,
-        tryAutoLogin: true 
-    });
-    
+    // --- Variables Globales et Initialisation ---
+    let wax = null;
     let userAccount = null;
 
-    // L'initialisation est appelée au chargement
-    document.addEventListener('DOMContentLoaded', () => {
+    // Fonction d'initialisation appelée après le chargement du DOM
+    function initializeWax() {
+        // VÉRIFICATION CLÉ : S'assurer que la classe WaxJS existe
+        if (typeof WaxJS === 'undefined') {
+            console.error("Erreur critique : La librairie waxjs.js n'a pas été chargée.");
+            document.getElementById('wallet-status').innerText = "Erreur: WAXJS non chargé. Rechargez la page.";
+            // On empêche le clic pour ne pas avoir l'erreur
+            document.getElementById('connect-button').onclick = function() {
+                alert("Erreur: WAXJS n'est pas initialisé."); 
+            };
+            return;
+        }
+        
+        // Si WaxJS est défini, on peut initialiser
+        wax = new WaxJS({
+            rpcEndpoint: WAX_ENDPOINT,
+            tryAutoLogin: true 
+        });
+        
+        // On lance l'auto-login une fois que wax est bien initialisé
         initWax();
-    });
+    }
+
+    // Appel l'initialisation après que tout le HTML soit chargé
+    document.addEventListener('DOMContentLoaded', initializeWax);
 
     async function initWax() {
-        if (await wax.isLoggedIn()) {
+        if (wax && await wax.isLoggedIn()) {
             userAccount = wax.userAccount;
             document.getElementById('wallet-status').innerText = `Connecté: ${userAccount}`;
             await checkAndApplyAssets(userAccount);
@@ -30,10 +140,10 @@
 
     // Fonction appelée par le bouton "Connecter"
     async function loginWax() {
-        // La vérification ! Si wax n'est pas défini (bien que maintenant il le soit), on alerte.
         if (!wax) {
-             alert("Erreur critique: WAXJS n'a pas pu s'initialiser.");
-             return;
+            // Cette alerte est le fallback si l'initialisation a échoué (très peu probable maintenant)
+            alert("Erreur: WAXJS n'est pas initialisé.");
+            return;
         }
         
         try {
@@ -57,7 +167,6 @@
             const response = await fetch(`${API_URL}?owner=${walletAddress}&collection_name=${COLLECTION_NAME}&template_id=${templateId}&limit=1&hide_offers=true`);
             const data = await response.json();
             
-            // Retourne TRUE si des assets sont trouvés pour ce template ID
             return data.data && data.data.length > 0;
             
         } catch (error) {
@@ -80,7 +189,6 @@
                 ✅ **Félicitations, COMMANDANT !**
                 <br>NFT ${TEMPLATE_ID_TEST} (Tank HQ) trouvé ! Accès aux unités premium débloqué !
             `;
-            // --- Logique du jeu/simulateur : C'EST ICI QUE VOUS LANCEZ VOTRE JEU AVEC LES BONUS ---
         } else {
             document.getElementById('asset-status').className = 'failure';
             document.getElementById('asset-status').innerHTML = `
@@ -90,3 +198,6 @@
         }
     }
 </script>
+
+</body>
+</html>
